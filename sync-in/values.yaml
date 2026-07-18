@@ -216,7 +216,7 @@ onlyoffice:
   enabled: false
   image:
     repository: onlyoffice/documentserver
-    tag: "9.3.1.2"
+    tag: "9.4.0.1"
     pullPolicy: IfNotPresent
   # -- Name of an existing Secret providing the OnlyOffice JWT secret.
   # When set, the chart reads JWT_SECRET from this Secret instead of .Values.onlyoffice.jwtSecret.
