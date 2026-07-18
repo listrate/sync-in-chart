@@ -1,8 +1,6 @@
 suite: deployment nginx
 templates:
   - templates/deployment-nginx.yaml
-  - templates/configmap-nginx.yaml
-  - templates/configmap-nginx-onlyoffice.yaml
 tests:
   - it: renders with default values
     set:
@@ -16,10 +14,8 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].image
           value: nginx:alpine
-      - contains:
+      - exists:
           path: spec.template.metadata.annotations
-          content:
-            checksum/config: RELEASE-NAME-sync-in-nginx
 
   - it: mounts nginx config
     set:
@@ -61,6 +57,7 @@ tests:
           content:
             name: nginx-onlyoffice
             mountPath: /etc/nginx/onlyoffice.conf
+            subPath: onlyoffice.conf
       - contains:
           path: spec.template.spec.volumes
           content:

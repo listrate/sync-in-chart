@@ -15,7 +15,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/secret: {{ include (print $.Template.BasePath "/secret-onlyoffice.yaml") . | sha256sum }}
+        checksum/secret: {{ include "sync-in.checksum-oo" . }}
       labels:
         {{- include "sync-in.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: onlyoffice

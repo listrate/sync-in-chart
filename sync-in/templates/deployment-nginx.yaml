@@ -14,7 +14,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: {{ printf "%s%s" (include (print $.Template.BasePath "/configmap-nginx.yaml") .) (include (print $.Template.BasePath "/configmap-nginx-onlyoffice.yaml") .) | sha256sum }}
+        checksum/config: {{ include "sync-in.checksum-nginx" . }}
       labels:
         {{- include "sync-in.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: nginx

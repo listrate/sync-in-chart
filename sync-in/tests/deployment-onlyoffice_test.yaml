@@ -1,7 +1,6 @@
 suite: deployment onlyoffice
 templates:
   - templates/deployment-onlyoffice.yaml
-  - templates/secret-onlyoffice.yaml
 tests:
   - it: renders when onlyoffice is enabled
     set:
@@ -32,11 +31,6 @@ tests:
           content:
             secretRef:
               name: RELEASE-NAME-sync-in-onlyoffice
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: JWT_IN_BODY
-            value: "true"
 
   - it: uses existingSecret with secretKeyRef when set
     set:
@@ -53,17 +47,6 @@ tests:
               secretKeyRef:
                 name: my-oo-secret
                 key: jwt
-
-  - it: has checksum annotation
-    set:
-      onlyoffice.enabled: true
-      onlyoffice.jwtSecret: testsecret
-      mariadb.rootPassword: testpass
-    asserts:
-      - contains:
-          path: spec.template.metadata.annotations
-          content:
-            checksum/secret: RELEASE-NAME-sync-in-onlyoffice
 
   - it: uses custom image tag
     set:

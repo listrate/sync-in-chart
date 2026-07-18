@@ -3,6 +3,9 @@ templates:
   - templates/configmap-nginx.yaml
 tests:
   - it: renders with nginx config
+    documentSelector:
+      path: kind
+      value: ConfigMap
     set:
       mariadb.rootPassword: testpass
     asserts:
@@ -12,16 +15,19 @@ tests:
           path: metadata.name
           value: RELEASE-NAME-sync-in-nginx
       - matchRegex:
-          path: data.nginx\.conf
+          path: data["nginx.conf"]
           pattern: "upstream sync_in_server"
       - matchRegex:
-          path: data.nginx\.conf
+          path: data["nginx.conf"]
           pattern: "server RELEASE-NAME-sync-in:8080"
       - matchRegex:
-          path: data.nginx\.conf
+          path: data["nginx.conf"]
           pattern: "proxy_pass http://sync_in_server"
 
   - it: includes onlyoffice include when enabled
+    documentSelector:
+      path: kind
+      value: ConfigMap
     set:
       mariadb.rootPassword: testpass
       onlyoffice.enabled: true
@@ -31,22 +37,28 @@ tests:
       auth.token.refresh.secret: refresh-secret
     asserts:
       - matchRegex:
-          path: data.nginx\.conf
+          path: data["nginx.conf"]
           pattern: "include /etc/nginx/onlyoffice.conf"
 
   - it: omits onlyoffice include when disabled
+    documentSelector:
+      path: kind
+      value: ConfigMap
     set:
       mariadb.rootPassword: testpass
     asserts:
       - notMatchRegex:
-          path: data.nginx\.conf
+          path: data["nginx.conf"]
           pattern: "include /etc/nginx/onlyoffice.conf"
 
   - it: includes extra server config
+    documentSelector:
+      path: kind
+      value: ConfigMap
     set:
       mariadb.rootPassword: testpass
       nginx.extraServerConfig: "add_header X-Frame-Options SAMEORIGIN;"
     asserts:
       - matchRegex:
-          path: data.nginx\.conf
+          path: data["nginx.conf"]
           pattern: "add_header X-Frame-Options SAMEORIGIN"

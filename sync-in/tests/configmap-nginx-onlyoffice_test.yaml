@@ -14,10 +14,10 @@ tests:
           path: metadata.name
           value: RELEASE-NAME-sync-in-nginx-onlyoffice
       - matchRegex:
-          path: data.onlyoffice\.conf
+          path: data["onlyoffice.conf"]
           pattern: "location \\^~ /onlyoffice/"
       - matchRegex:
-          path: data.onlyoffice\.conf
+          path: data["onlyoffice.conf"]
           pattern: "proxy_pass http://RELEASE-NAME-sync-in-onlyoffice:80/"
 
   - it: does not render when onlyoffice is disabled

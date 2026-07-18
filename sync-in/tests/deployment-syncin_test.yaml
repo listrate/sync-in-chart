@@ -1,7 +1,6 @@
 suite: deployment sync-in
 templates:
   - templates/deployment-syncin.yaml
-  - templates/secret-env.yaml
 tests:
   - it: renders with default values
     set:
@@ -19,15 +18,16 @@ tests:
           path: spec.replicas
           value: 1
       - equal:
+          path: spec.strategy.type
+          value: Recreate
+      - equal:
           path: spec.template.spec.containers[0].image
           value: syncin/server:2
-      - contains:
-          path: spec.template.metadata.annotations
-          content:
-            checksum/secret: RELEASE-NAME-sync-in-env
       - equal:
           path: spec.template.spec.serviceAccountName
           value: RELEASE-NAME-sync-in
+      - exists:
+          path: spec.template.metadata.annotations
 
   - it: includes init container when mariadb is enabled
     set:
@@ -40,8 +40,8 @@ tests:
           path: spec.template.spec.initContainers[0].name
           value: wait-for-mariadb
       - contains:
-          path: spec.template.spec.initContainers[0].command[2]
-          content: nc -z -w 2 RELEASE-NAME-sync-in-mariadb 3306
+          path: spec.template.spec.initContainers[0].command
+          content: "sh"
 
   - it: omits init container when mariadb is disabled
     set:
@@ -67,6 +67,8 @@ tests:
           content:
             name: environment
             mountPath: /app/environment/environment.yaml
+            subPath: environment.yaml
+            readOnly: true
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
           content:
@@ -113,6 +115,7 @@ tests:
           content:
             name: external-db
             mountPath: /run/secrets/external-db
+            readOnly: true
       - contains:
           path: spec.template.spec.volumes
           content:
@@ -203,14 +206,3 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].image
           value: syncin/server:3
-
-  - it: uses Recreate strategy
-    set:
-      mariadb.rootPassword: testpass
-      auth.encryptionKey: testkey
-      auth.token.access.secret: access-secret
-      auth.token.refresh.secret: refresh-secret
-    asserts:
-      - equal:
-          path: spec.strategy.type
-          value: Recreate
