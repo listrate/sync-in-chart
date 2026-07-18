@@ -1,0 +1,77 @@
+suite: deployment onlyoffice
+templates:
+  - templates/deployment-onlyoffice.yaml
+  - templates/secret-onlyoffice.yaml
+tests:
+  - it: renders when onlyoffice is enabled
+    set:
+      onlyoffice.enabled: true
+      onlyoffice.jwtSecret: testsecret
+      mariadb.rootPassword: testpass
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-sync-in-onlyoffice
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: onlyoffice/documentserver:9.3.1.2
+
+  - it: uses envFrom secret when existingSecret is not set
+    set:
+      onlyoffice.enabled: true
+      onlyoffice.jwtSecret: testsecret
+      mariadb.rootPassword: testpass
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: RELEASE-NAME-sync-in-onlyoffice
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: JWT_IN_BODY
+            value: "true"
+
+  - it: uses existingSecret with secretKeyRef when set
+    set:
+      onlyoffice.enabled: true
+      onlyoffice.existingSecret: my-oo-secret
+      onlyoffice.jwtSecretKey: jwt
+      mariadb.rootPassword: testpass
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: JWT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: my-oo-secret
+                key: jwt
+
+  - it: has checksum annotation
+    set:
+      onlyoffice.enabled: true
+      onlyoffice.jwtSecret: testsecret
+      mariadb.rootPassword: testpass
+    asserts:
+      - contains:
+          path: spec.template.metadata.annotations
+          content:
+            checksum/secret: RELEASE-NAME-sync-in-onlyoffice
+
+  - it: uses custom image tag
+    set:
+      onlyoffice.enabled: true
+      onlyoffice.jwtSecret: testsecret
+      onlyoffice.image.tag: "10.0.0.0"
+      mariadb.rootPassword: testpass
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: onlyoffice/documentserver:10.0.0.0

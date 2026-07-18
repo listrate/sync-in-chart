@@ -1,0 +1,216 @@
+suite: deployment sync-in
+templates:
+  - templates/deployment-syncin.yaml
+  - templates/secret-env.yaml
+tests:
+  - it: renders with default values
+    set:
+      mariadb.rootPassword: testpass
+      auth.encryptionKey: testkey
+      auth.token.access.secret: access-secret
+      auth.token.refresh.secret: refresh-secret
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-sync-in
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: syncin/server:2
+      - contains:
+          path: spec.template.metadata.annotations
+          content:
+            checksum/secret: RELEASE-NAME-sync-in-env
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-sync-in
+
+  - it: includes init container when mariadb is enabled
+    set:
+      mariadb.rootPassword: testpass
+      auth.encryptionKey: testkey
+      auth.token.access.secret: access-secret
+      auth.token.refresh.secret: refresh-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-mariadb
+      - contains:
+          path: spec.template.spec.initContainers[0].command[2]
+          content: nc -z -w 2 RELEASE-NAME-sync-in-mariadb 3306
+
+  - it: omits init container when mariadb is disabled
+    set:
+      mariadb.enabled: false
+      externalDatabase.host: db.example.com
+      externalDatabase.password: extpass
+      auth.encryptionKey: testkey
+      auth.token.access.secret: access-secret
+      auth.token.refresh.secret: refresh-secret
+    asserts:
+      - isNull:
+          path: spec.template.spec.initContainers
+
+  - it: mounts environment secret and data PVC
+    set:
+      mariadb.rootPassword: testpass
+      auth.encryptionKey: testkey
+      auth.token.access.secret: access-secret
+      auth.token.refresh.secret: refresh-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: environment
+            mountPath: /app/environment/environment.yaml
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: data
+            mountPath: /app/data
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: environment
+            secret:
+              secretName: RELEASE-NAME-sync-in-env
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            persistentVolumeClaim:
+              claimName: RELEASE-NAME-sync-in-data
+
+  - it: uses external env secret when existingEnvSecret is set
+    set:
+      mariadb.rootPassword: testpass
+      syncin.existingEnvSecret: my-custom-env
+      auth.encryptionKey: testkey
+      auth.token.access.secret: access-secret
+      auth.token.refresh.secret: refresh-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: environment
+            secret:
+              secretName: my-custom-env
+
+  - it: mounts external database secret when set
+    set:
+      mariadb.enabled: false
+      externalDatabase.existingSecret: ext-db-secret
+      auth.encryptionKey: testkey
+      auth.token.access.secret: access-secret
+      auth.token.refresh.secret: refresh-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: external-db
+            mountPath: /run/secrets/external-db
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: external-db
+            secret:
+              secretName: ext-db-secret
+
+  - it: sets INIT_ADMIN env vars when enabled
+    set:
+      mariadb.rootPassword: testpass
+      syncin.initAdmin: true
+      syncin.initAdminLogin: admin
+      syncin.initAdminPassword: admin123
+      auth.encryptionKey: testkey
+      auth.token.access.secret: access-secret
+      auth.token.refresh.secret: refresh-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: INIT_ADMIN
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: INIT_ADMIN_LOGIN
+            value: admin
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: INIT_ADMIN_PASSWORD
+            value: admin123
+
+  - it: sets PUID and PGID env vars
+    set:
+      mariadb.rootPassword: testpass
+      auth.encryptionKey: testkey
+      auth.token.access.secret: access-secret
+      auth.token.refresh.secret: refresh-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PUID
+            value: "1000"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PGID
+            value: "1000"
+
+  - it: sets FORCE_PERMISSIONS when enabled
+    set:
+      mariadb.rootPassword: testpass
+      syncin.forcePermissions: true
+      auth.encryptionKey: testkey
+      auth.token.access.secret: access-secret
+      auth.token.refresh.secret: refresh-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: FORCE_PERMISSIONS
+            value: "true"
+
+  - it: sets SYNCIN_MYSQL_URL_FILE when external db secret is used
+    set:
+      mariadb.enabled: false
+      externalDatabase.existingSecret: ext-db-secret
+      auth.encryptionKey: testkey
+      auth.token.access.secret: access-secret
+      auth.token.refresh.secret: refresh-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SYNCIN_MYSQL_URL_FILE
+            value: /run/secrets/external-db/mysql-url
+
+  - it: uses custom image tag
+    set:
+      mariadb.rootPassword: testpass
+      syncin.image.tag: "3"
+      auth.encryptionKey: testkey
+      auth.token.access.secret: access-secret
+      auth.token.refresh.secret: refresh-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: syncin/server:3
+
+  - it: uses Recreate strategy
+    set:
+      mariadb.rootPassword: testpass
+      auth.encryptionKey: testkey
+      auth.token.access.secret: access-secret
+      auth.token.refresh.secret: refresh-secret
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: Recreate

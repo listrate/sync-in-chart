@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sync-in/Chart.yaml'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.0
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Get chart version
+        id: version
+        run: |
+          VERSION=$(grep '^version:' sync-in/Chart.yaml | awk '{print $2}')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      - name: Package
+        run: helm package ./sync-in
+      - name: Push to GHCR
+        run: helm push sync-in-${{ steps.version.outputs.version }}.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: sync-in-${{ steps.version.outputs.version }}
+          name: sync-in-${{ steps.version.outputs.version }}
+          files: sync-in-${{ steps.version.outputs.version }}.tgz
+          generate_release_notes: true

@@ -1,0 +1,99 @@
+suite: deployment mariadb
+templates:
+  - templates/deployment-mariadb.yaml
+tests:
+  - it: renders when mariadb is enabled
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-sync-in-mariadb
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: mariadb:11
+
+  - it: uses Recreate strategy
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+
+  - it: sets MYSQL_ROOT_PASSWORD from secret
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MYSQL_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-sync-in-mariadb
+                key: root-password
+
+  - it: sets MYSQL_DATABASE env var
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MYSQL_DATABASE
+            value: sync_in
+
+  - it: mounts PVC when persistence is enabled
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: data
+            mountPath: /var/lib/mysql
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            persistentVolumeClaim:
+              claimName: RELEASE-NAME-sync-in-mariadb
+
+  - it: uses emptyDir when persistence is disabled
+    set:
+      mariadb.rootPassword: testpass
+      mariadb.persistence.enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            emptyDir: {}
+
+  - it: includes command args
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command[0]
+          value: docker-entrypoint.sh
+      - contains:
+          path: spec.template.spec.containers[0].command
+          content: "--innodb_ft_cache_size=16000000"
+      - contains:
+          path: spec.template.spec.containers[0].command
+          content: "--max-allowed-packet=1G"
+
+  - it: uses Recreate strategy
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: Recreate

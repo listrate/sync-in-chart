@@ -1,0 +1,283 @@
+# -- Override the name of the chart
+nameOverride: ""
+# -- Override the full name of the release
+fullnameOverride: ""
+
+# Sync-in server configuration
+syncin:
+  image:
+    repository: syncin/server
+    tag: "2"
+    pullPolicy: IfNotPresent
+  # -- Number of replicas
+  replicas: 1
+  # -- INIT_ADMIN: create admin account on first launch
+  initAdmin: false
+  # -- INIT_ADMIN_LOGIN
+  initAdminLogin: ""
+  # -- INIT_ADMIN_PASSWORD
+  initAdminPassword: ""
+  # -- File ownership UID for /app/data
+  puid: 1000
+  # -- File ownership GID for /app/data
+  pgid: 1000
+  # -- Force permissions on /app/data at startup
+  forcePermissions: false
+  # -- Resource requests/limits
+  resources: {}
+    # requests:
+    #   cpu: 250m
+    #   memory: 512Mi
+    # limits:
+    #   memory: 2Gi
+  # -- Node selector
+  nodeSelector: {}
+  # -- Tolerations
+  tolerations: []
+  # -- Affinity
+  affinity: {}
+  # -- Init container image used to wait for MariaDB readiness
+  initContainerImage:
+    repository: busybox
+    tag: "1.36"
+    pullPolicy: IfNotPresent
+  # -- Pod security context.
+  # The syncin/server image uses the PUID/PGID pattern: it starts as root,
+  # fixes ownership of /app and /app/data to PUID:PGID, then drops privileges.
+  # Therefore the container must start as root (runAsNonRoot must NOT be enforced).
+  podSecurityContext:
+    fsGroup: 1000
+  # -- Name of an existing Secret containing environment.yaml. If set, the chart
+  # mounts this Secret instead of generating one. The Secret must have key: environment.yaml
+  # containing the full Sync-in environment configuration (mysql, auth, applications, etc.).
+  existingEnvSecret: ""
+  # -- Container security context
+  securityContext:
+    runAsUser: 0
+    runAsNonRoot: false
+    allowPrivilegeEscalation: true
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
+      add:
+        - CHOWN
+        - FOWNER
+        - DAC_OVERRIDE
+        - SETUID
+        - SETGID
+
+# Authentication secrets
+auth:
+  # -- Authentication provider: "mysql" (local accounts), "oidc" (OpenID Connect).
+  # LDAP is not templated by this chart; use syncin.existingEnvSecret for LDAP.
+  provider: mysql
+  # -- Name of an existing Secret providing auth secrets via well-known keys.
+  # When set, the chart reads sensitive values from this Secret (via Helm lookup)
+  # instead of using the inline values below. The Secret must exist before 'helm install'.
+  # Note: during 'helm template', lookup returns empty — use 'helm install/upgrade' for live values.
+  existingSecret: ""
+  # -- Key in auth.existingSecret for the encryption key
+  encryptionKeySecretKey: ""
+  # -- Encryption key for the server. Required when auth.existingSecret is not set.
+  encryptionKey: ""
+  token:
+    access:
+      # -- Key in auth.existingSecret for the access token secret
+      secretSecretKey: ""
+      # -- Access token secret. Required when auth.existingSecret is not set.
+      secret: ""
+    refresh:
+      # -- Key in auth.existingSecret for the refresh token secret
+      secretSecretKey: ""
+      # -- Refresh token secret. Required when auth.existingSecret is not set.
+      secret: ""
+  # OpenID Connect configuration (only rendered when auth.provider is "oidc").
+  # See https://sync-in.com/docs/setup-guide/server#oidc-if-provider-oidc-
+  oidc:
+    # -- OIDC provider discovery URL (e.g. https://auth.example.com/realms/my-realm)
+    issuerUrl: ""
+    # -- OAuth 2.0 Client ID
+    clientId: ""
+    # -- Key in auth.existingSecret for the OIDC client secret
+    clientSecretSecretKey: ""
+    # -- OAuth 2.0 Client Secret. Required when auth.provider is oidc and auth.existingSecret is not set.
+    clientSecret: ""
+    # -- Callback URL registered with the provider. MUST end with /api/auth/oidc/callback
+    redirectUri: ""
+    options:
+      # -- Create a local user on first successful OIDC login
+      autoCreateUser: true
+      # -- Permissions assigned to auto-created users (e.g. [personal_space, spaces_access])
+      autoCreatePermissions: []
+      # -- Role or group name that grants Sync-in admin privileges (matched against roles/groups claims)
+      adminRoleOrGroup: ""
+      # -- Allow local password authentication in addition to OIDC
+      enablePasswordAuth: false
+      # -- Download and sync the user avatar from the OIDC picture claim
+      autoSyncAvatar: false
+      # -- Skip the login page and redirect straight to the IdP
+      autoRedirect: false
+      # -- Label of the OIDC login button
+      buttonText: "Continue with OpenID Connect"
+    security:
+      # -- OAuth 2.0 scopes to request (space-separated)
+      scope: "openid email profile"
+      # -- Enable PKCE in the authorization code flow
+      supportPKCE: true
+      # -- Allow OIDC discovery/token requests over insecure HTTP (dev only)
+      allowInsecureRequests: false
+      # -- Token endpoint auth method: client_secret_basic | client_secret_post | none
+      tokenEndpointAuthMethod: client_secret_basic
+      # -- Signing algorithm for ID tokens (RS256, RS384, ES256, ...)
+      tokenSigningAlg: RS256
+
+# MariaDB configuration (matches official docker-compose: mariadb:11)
+mariadb:
+  # -- Deploy built-in MariaDB (single instance, matches docker-compose).
+  # Set to false to use an external database via externalDatabase.
+  enabled: true
+  # -- Database name to create
+  database: sync_in
+  image:
+    repository: mariadb
+    tag: "11"
+    pullPolicy: IfNotPresent
+  # -- MariaDB root password (required when mariadb.enabled is true)
+  rootPassword: ""
+  # -- Extra command-line arguments passed to mysqld. Each argument must be a separate list element.
+  # Matches the official docker-compose: --innodb_ft_cache_size=16000000 --max-allowed-packet=1G
+  commandArgs:
+    - "--innodb_ft_cache_size=16000000"
+    - "--max-allowed-packet=1G"
+  # -- Resource requests/limits
+  resources: {}
+  # -- Node selector
+  nodeSelector: {}
+  # -- Tolerations
+  tolerations: []
+  # -- Affinity
+  affinity: {}
+  # -- Pod security context
+  podSecurityContext: {}
+  # -- Container security context
+  securityContext: {}
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+
+# External database configuration (used when mariadb.enabled is false)
+externalDatabase:
+  # -- External MySQL/MariaDB host
+  host: ""
+  # -- External database port
+  port: 3306
+  # -- External database user
+  user: root
+  # -- External database password
+  password: ""
+  # -- External database name
+  database: sync_in
+  # -- Use a full connection URL instead of host/user/password/database fields.
+  # Example: mysql://user:password@host:3306/database
+  url: ""
+  # -- Name of an existing Secret containing the database URL.
+  # The Secret must have key: mysql-url
+  existingSecret: ""
+
+# Nginx reverse proxy configuration
+nginx:
+  image:
+    repository: nginx
+    tag: alpine
+    pullPolicy: IfNotPresent
+  # -- Number of replicas
+  replicas: 1
+  # -- Resource requests/limits
+  resources: {}
+  # -- Node selector
+  nodeSelector: {}
+  # -- Tolerations
+  tolerations: []
+  # -- Affinity
+  affinity: {}
+  # -- Pod security context
+  podSecurityContext: {}
+  # -- Container security context
+  securityContext: {}
+  # -- Additional Nginx config directives for the server block
+  extraServerConfig: ""
+
+# OnlyOffice DocumentServer configuration
+onlyoffice:
+  # -- Enable OnlyOffice DocumentServer
+  enabled: false
+  image:
+    repository: onlyoffice/documentserver
+    tag: "9.3.1.2"
+    pullPolicy: IfNotPresent
+  # -- Name of an existing Secret providing the OnlyOffice JWT secret.
+  # When set, the chart reads JWT_SECRET from this Secret instead of .Values.onlyoffice.jwtSecret.
+  existingSecret: ""
+  # -- Key in onlyoffice.existingSecret for the JWT secret
+  jwtSecretKey: ""
+  # -- JWT secret for OnlyOffice integration. Required when onlyoffice.enabled is true
+  # and onlyoffice.existingSecret is not set.
+  jwtSecret: ""
+  # -- Resource requests/limits
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      memory: 4Gi
+  # -- Node selector
+  nodeSelector: {}
+  # -- Tolerations
+  tolerations: []
+  # -- Affinity
+  affinity: {}
+  # -- Pod security context
+  podSecurityContext: {}
+  # -- Container security context
+  securityContext: {}
+
+# Persistence configuration for sync-in application data
+persistence:
+  # -- Persistence settings for sync-in application data (/app/data)
+  data:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+
+# Gateway API HTTPRoute configuration
+route:
+  # -- Enable HTTPRoute creation
+  enabled: false
+  # -- ParentRefs for the Gateway (e.g. envoy-external)
+  parentRefs:
+    - name: envoy-external
+      namespace: network
+      sectionName: ""
+  # -- Hostnames for the route
+  hostnames: []
+  # -- Additional annotations for the HTTPRoute
+  annotations: {}
+  # -- Additional HTTPRoute rules (appended after the default rule)
+  extraRules: []
+
+# -- Service account configuration
+serviceAccount:
+  create: true
+  name: ""
+
+# -- Image pull secrets
+imagePullSecrets: []
+
+# -- Common annotations for all resources
+commonAnnotations: {}
+# -- Common labels for all resources
+commonLabels: {}

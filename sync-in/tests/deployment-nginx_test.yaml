@@ -1,0 +1,69 @@
+suite: deployment nginx
+templates:
+  - templates/deployment-nginx.yaml
+  - templates/configmap-nginx.yaml
+  - templates/configmap-nginx-onlyoffice.yaml
+tests:
+  - it: renders with default values
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-sync-in-nginx
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: nginx:alpine
+      - contains:
+          path: spec.template.metadata.annotations
+          content:
+            checksum/config: RELEASE-NAME-sync-in-nginx
+
+  - it: mounts nginx config
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: nginx-config
+            mountPath: /etc/nginx/conf.d/default.conf
+            subPath: nginx.conf
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: nginx-config
+            configMap:
+              name: RELEASE-NAME-sync-in-nginx
+
+  - it: omits onlyoffice config when onlyoffice is disabled
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: nginx-onlyoffice
+
+  - it: mounts onlyoffice config when onlyoffice is enabled
+    set:
+      mariadb.rootPassword: testpass
+      onlyoffice.enabled: true
+      onlyoffice.jwtSecret: testsecret
+      auth.encryptionKey: testkey
+      auth.token.access.secret: access-secret
+      auth.token.refresh.secret: refresh-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: nginx-onlyoffice
+            mountPath: /etc/nginx/onlyoffice.conf
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: nginx-onlyoffice
+            configMap:
+              name: RELEASE-NAME-sync-in-nginx-onlyoffice

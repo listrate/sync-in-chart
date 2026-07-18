@@ -1,0 +1,28 @@
+suite: configmap nginx onlyoffice
+templates:
+  - templates/configmap-nginx-onlyoffice.yaml
+tests:
+  - it: renders when onlyoffice is enabled
+    set:
+      onlyoffice.enabled: true
+      onlyoffice.jwtSecret: testsecret
+      mariadb.rootPassword: testpass
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-sync-in-nginx-onlyoffice
+      - matchRegex:
+          path: data.onlyoffice\.conf
+          pattern: "location \\^~ /onlyoffice/"
+      - matchRegex:
+          path: data.onlyoffice\.conf
+          pattern: "proxy_pass http://RELEASE-NAME-sync-in-onlyoffice:80/"
+
+  - it: does not render when onlyoffice is disabled
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - hasDocuments:
+          count: 0

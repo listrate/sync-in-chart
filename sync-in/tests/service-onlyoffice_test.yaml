@@ -1,0 +1,25 @@
+suite: service onlyoffice
+templates:
+  - templates/service-onlyoffice.yaml
+tests:
+  - it: renders when onlyoffice is enabled
+    set:
+      onlyoffice.enabled: true
+      onlyoffice.jwtSecret: testsecret
+      mariadb.rootPassword: testpass
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-sync-in-onlyoffice
+      - equal:
+          path: spec.ports[0].port
+          value: 80
+
+  - it: does not render when onlyoffice is disabled
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - hasDocuments:
+          count: 0

@@ -1,0 +1,16 @@
+apiVersion: v2
+name: sync-in
+description: A Helm chart for Sync-in collaborative platform with optional OnlyOffice DocumentServer integration
+type: application
+version: 1.2.0
+appVersion: "2"
+keywords:
+  - sync-in
+  - collaboration
+  - onlyoffice
+  - office
+home: https://sync-in.com
+sources:
+  - https://github.com/Sync-in/server
+maintainers:
+  - name: helm-chart-maintainer

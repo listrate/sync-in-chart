@@ -1,0 +1,40 @@
+suite: pvc sync-in data
+templates:
+  - templates/pvc-syncin-data.yaml
+tests:
+  - it: renders with default values
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-sync-in-data
+      - equal:
+          path: spec.resources.requests.storage
+          value: 10Gi
+      - equal:
+          path: spec.accessModes[0]
+          value: ReadWriteOnce
+
+  - it: does not render when persistence disabled
+    set:
+      persistence.data.enabled: false
+      mariadb.rootPassword: testpass
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: sets custom storage class and size
+    set:
+      persistence.data.size: 50Gi
+      persistence.data.storageClass: fast-ssd
+      mariadb.rootPassword: testpass
+    asserts:
+      - equal:
+          path: spec.resources.requests.storage
+          value: 50Gi
+      - equal:
+          path: spec.storageClassName
+          value: fast-ssd

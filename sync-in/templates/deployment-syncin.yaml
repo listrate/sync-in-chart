@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sync-in.fullname" . }}
+  labels:
+    {{- include "sync-in.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sync-in
+spec:
+  replicas: {{ .Values.syncin.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "sync-in.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: sync-in
+  template:
+    metadata:
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret-env.yaml") . | sha256sum }}
+      labels:
+        {{- include "sync-in.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: sync-in
+    spec:
+      serviceAccountName: {{ include "sync-in.fullname" . }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      securityContext:
+        {{- toYaml .Values.syncin.podSecurityContext | nindent 8 }}
+      {{- if .Values.mariadb.enabled }}
+      initContainers:
+        - name: wait-for-mariadb
+          image: "{{ .Values.syncin.initContainerImage.repository }}:{{ .Values.syncin.initContainerImage.tag }}"
+          imagePullPolicy: {{ .Values.syncin.initContainerImage.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for MariaDB at {{ include "sync-in.mariadb-svc" . }}:3306..."
+              until nc -z -w 2 {{ include "sync-in.mariadb-svc" . }} 3306; do
+                echo "MariaDB not ready, retrying in 5s..."
+                sleep 5
+              done
+              echo "MariaDB is ready."
+      {{- end }}
+      containers:
+        - name: sync-in
+          image: "{{ .Values.syncin.image.repository }}:{{ .Values.syncin.image.tag }}"
+          imagePullPolicy: {{ .Values.syncin.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.syncin.securityContext | nindent 12 }}
+          env:
+            {{- if .Values.syncin.initAdmin }}
+            - name: INIT_ADMIN
+              value: "true"
+            {{- end }}
+            {{- if .Values.syncin.initAdminLogin }}
+            - name: INIT_ADMIN_LOGIN
+              value: {{ .Values.syncin.initAdminLogin | quote }}
+            {{- end }}
+            {{- if .Values.syncin.initAdminPassword }}
+            - name: INIT_ADMIN_PASSWORD
+              value: {{ .Values.syncin.initAdminPassword | quote }}
+            {{- end }}
+            - name: PUID
+              value: {{ .Values.syncin.puid | quote }}
+            - name: PGID
+              value: {{ .Values.syncin.pgid | quote }}
+            {{- if .Values.syncin.forcePermissions }}
+            - name: FORCE_PERMISSIONS
+              value: "true"
+            {{- end }}
+            {{- if .Values.externalDatabase.existingSecret }}
+            - name: SYNCIN_MYSQL_URL_FILE
+              value: /run/secrets/external-db/mysql-url
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - name: environment
+              mountPath: /app/environment/environment.yaml
+              subPath: environment.yaml
+              readOnly: true
+            - name: data
+              mountPath: /app/data
+            {{- if .Values.externalDatabase.existingSecret }}
+            - name: external-db
+              mountPath: /run/secrets/external-db
+              readOnly: true
+            {{- end }}
+          resources:
+            {{- toYaml .Values.syncin.resources | nindent 12 }}
+      volumes:
+        - name: environment
+          secret:
+            {{- if .Values.syncin.existingEnvSecret }}
+            secretName: {{ .Values.syncin.existingEnvSecret }}
+            {{- else }}
+            secretName: {{ include "sync-in.fullname" . }}-env
+            {{- end }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "sync-in.fullname" . }}-data
+        {{- if .Values.externalDatabase.existingSecret }}
+        - name: external-db
+          secret:
+            secretName: {{ .Values.externalDatabase.existingSecret }}
+        {{- end }}
+      {{- with .Values.syncin.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.syncin.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.syncin.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

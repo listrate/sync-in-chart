@@ -1,0 +1,52 @@
+suite: configmap nginx
+templates:
+  - templates/configmap-nginx.yaml
+tests:
+  - it: renders with nginx config
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-sync-in-nginx
+      - matchRegex:
+          path: data.nginx\.conf
+          pattern: "upstream sync_in_server"
+      - matchRegex:
+          path: data.nginx\.conf
+          pattern: "server RELEASE-NAME-sync-in:8080"
+      - matchRegex:
+          path: data.nginx\.conf
+          pattern: "proxy_pass http://sync_in_server"
+
+  - it: includes onlyoffice include when enabled
+    set:
+      mariadb.rootPassword: testpass
+      onlyoffice.enabled: true
+      onlyoffice.jwtSecret: testsecret
+      auth.encryptionKey: testkey
+      auth.token.access.secret: access-secret
+      auth.token.refresh.secret: refresh-secret
+    asserts:
+      - matchRegex:
+          path: data.nginx\.conf
+          pattern: "include /etc/nginx/onlyoffice.conf"
+
+  - it: omits onlyoffice include when disabled
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - notMatchRegex:
+          path: data.nginx\.conf
+          pattern: "include /etc/nginx/onlyoffice.conf"
+
+  - it: includes extra server config
+    set:
+      mariadb.rootPassword: testpass
+      nginx.extraServerConfig: "add_header X-Frame-Options SAMEORIGIN;"
+    asserts:
+      - matchRegex:
+          path: data.nginx\.conf
+          pattern: "add_header X-Frame-Options SAMEORIGIN"

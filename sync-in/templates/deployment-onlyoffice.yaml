@@ -1,0 +1,73 @@
+{{- if .Values.onlyoffice.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sync-in.onlyoffice-name" . }}
+  labels:
+    {{- include "sync-in.labels" . | nindent 4 }}
+    app.kubernetes.io/component: onlyoffice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "sync-in.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: onlyoffice
+  template:
+    metadata:
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret-onlyoffice.yaml") . | sha256sum }}
+      labels:
+        {{- include "sync-in.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: onlyoffice
+    spec:
+      serviceAccountName: {{ include "sync-in.fullname" . }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      securityContext:
+        {{- toYaml .Values.onlyoffice.podSecurityContext | nindent 8 }}
+      containers:
+        - name: onlyoffice
+          image: "{{ .Values.onlyoffice.image.repository }}:{{ .Values.onlyoffice.image.tag }}"
+          imagePullPolicy: {{ .Values.onlyoffice.image.pullPolicy }}
+          {{- if .Values.onlyoffice.existingSecret }}
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.onlyoffice.existingSecret }}
+                  key: {{ required "onlyoffice.jwtSecretKey is required when onlyoffice.existingSecret is set" .Values.onlyoffice.jwtSecretKey }}
+            - name: JWT_IN_BODY
+              value: "true"
+            - name: USE_UNAUTHORIZED_STORAGE
+              value: "true"
+          {{- else }}
+          envFrom:
+            - secretRef:
+                name: {{ include "sync-in.fullname" . }}-onlyoffice
+          env:
+            - name: JWT_IN_BODY
+              value: "true"
+            - name: USE_UNAUTHORIZED_STORAGE
+              value: "true"
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.onlyoffice.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.onlyoffice.securityContext | nindent 12 }}
+      {{- with .Values.onlyoffice.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.onlyoffice.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.onlyoffice.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

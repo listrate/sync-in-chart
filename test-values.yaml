@@ -1,0 +1,11 @@
+# Minimal values for helm lint / template / unittest CI
+mariadb:
+  rootPassword: "test-db-password"
+
+auth:
+  encryptionKey: "test-encryption-key-32-chars!!"
+  token:
+    access:
+      secret: "test-access-secret-32-chars!!"
+    refresh:
+      secret: "test-refresh-secret-32-chars!!"

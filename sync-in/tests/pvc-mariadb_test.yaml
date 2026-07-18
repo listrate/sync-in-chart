@@ -1,0 +1,40 @@
+suite: pvc mariadb
+templates:
+  - templates/pvc-mariadb.yaml
+tests:
+  - it: renders when mariadb and persistence are enabled
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-sync-in-mariadb
+      - equal:
+          path: spec.resources.requests.storage
+          value: 10Gi
+
+  - it: does not render when mariadb is disabled
+    set:
+      mariadb.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not render when persistence is disabled
+    set:
+      mariadb.persistence.enabled: false
+      mariadb.rootPassword: testpass
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: sets custom storage class
+    set:
+      mariadb.persistence.storageClass: fast-ssd
+      mariadb.rootPassword: testpass
+    asserts:
+      - equal:
+          path: spec.storageClassName
+          value: fast-ssd
