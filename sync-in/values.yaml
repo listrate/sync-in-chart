@@ -141,7 +141,7 @@ mariadb:
   database: sync_in
   image:
     repository: mariadb
-    tag: "11"
+    tag: "12"
     pullPolicy: IfNotPresent
   # -- MariaDB root password (required when mariadb.enabled is true)
   rootPassword: ""
