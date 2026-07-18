@@ -35,54 +35,11 @@
     {
       "fileMatch": ["^sync-in/values.yaml$"],
       "matchStrings": [
-        "repository: nginx\\s+tag: (?<currentValue>\\S+)"
-      ],
-      "datasourceTemplate": "docker",
-      "depNameTemplate": "nginx",
-      "versioningTemplate": "docker"
-    },
-    {
-      "fileMatch": ["^sync-in/values.yaml$"],
-      "matchStrings": [
         "repository: busybox\\s+tag: \"(?<currentValue>[\\d.]+)\""
       ],
       "datasourceTemplate": "docker",
       "depNameTemplate": "busybox",
       "versioningTemplate": "docker"
-    }
-  ],
-  "packageRules": [
-    {
-      "description": "Bump chart patch version for non-server updates",
-      "matchManagers": ["regex"],
-      "matchDepNames": ["mariadb", "onlyoffice/documentserver", "nginx", "busybox"],
-      "matchUpdateTypes": ["pin", "digest", "patch", "minor"],
-      "postUpgradeTasks": {
-        "commands": [
-          "V=$(grep '^version:' sync-in/Chart.yaml | awk '{print $2}')",
-          "IFS='.' read -r MAJOR MINOR PATCH <<< \"$V\"",
-          "NEW_PATCH=$((PATCH + 1))",
-          "sed -i \"s/^version: ${V}/version: ${MAJOR}.${MINOR}.${NEW_PATCH}/\" sync-in/Chart.yaml"
-        ],
-        "fileFilters": ["sync-in/Chart.yaml"],
-        "executionMode": "update"
-      }
-    },
-    {
-      "description": "Bump chart major version for syncin/server updates",
-      "matchManagers": ["regex"],
-      "matchDepNames": ["syncin/server"],
-      "matchUpdateTypes": ["major"],
-      "postUpgradeTasks": {
-        "commands": [
-          "V=$(grep '^version:' sync-in/Chart.yaml | awk '{print $2}')",
-          "IFS='.' read -r MAJOR MINOR PATCH <<< \"$V\"",
-          "NEW_MAJOR=$((MAJOR + 1))",
-          "sed -i \"s/^version: ${V}/version: ${NEW_MAJOR}.0.0/\" sync-in/Chart.yaml"
-        ],
-        "fileFilters": ["sync-in/Chart.yaml"],
-        "executionMode": "update"
-      }
     }
   ]
 }

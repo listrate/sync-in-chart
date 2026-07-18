@@ -1,0 +1,66 @@
+name: Auto-bump chart version on Renovate PRs
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    if: github.actor == 'renovate[bot]'
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if chart version was already bumped
+        id: already-bumped
+        run: |
+          if git diff origin/${{ github.event.pull_request.base.ref }}...HEAD --name-only | grep -q 'Chart.yaml'; then
+            echo "bumped=true" >> $GITHUB_OUTPUT
+          else
+            echo "bumped=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Determine if syncin/server image changed
+        if: steps.already-bumped.outputs.bumped == 'false'
+        id: server-changed
+        run: |
+          if git diff origin/${{ github.event.pull_request.base.ref }}...HEAD -- sync-in/values.yaml | grep -q 'repository: syncin/server'; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Bump chart version
+        if: steps.already-bumped.outputs.bumped == 'false'
+        id: bump
+        run: |
+          VERSION=$(grep '^version:' sync-in/Chart.yaml | awk '{print $2}')
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          if [[ "${{ steps.server-changed.outputs.changed }}" == "true" ]]; then
+            NEW_MAJOR=$((MAJOR + 1))
+            NEW_VERSION="${NEW_MAJOR}.0.0"
+            sed -i "s/^version: ${VERSION}/version: ${NEW_VERSION}/" sync-in/Chart.yaml
+            NEW_APP_VERSION=$(grep 'repository: syncin/server' sync-in/values.yaml | head -1 | sed 's/.*tag: "\(.*\)"/\1/')
+            sed -i "s/^appVersion:.*/appVersion: \"${NEW_APP_VERSION}\"/" sync-in/Chart.yaml
+          else
+            NEW_MINOR=$((MINOR + 1))
+            NEW_VERSION="${MAJOR}.${NEW_MINOR}.0"
+            sed -i "s/^version: ${VERSION}/version: ${NEW_VERSION}/" sync-in/Chart.yaml
+          fi
+          echo "new_version=${NEW_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Commit and push version bump
+        if: steps.bump.outputs.new_version != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add sync-in/Chart.yaml
+          git diff --staged --quiet || git commit -m "chore: bump chart version to ${{ steps.bump.outputs.new_version }}"
+          git push
