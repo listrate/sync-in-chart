@@ -39,7 +39,7 @@ syncin:
   # -- Init container image used to wait for MariaDB readiness
   initContainerImage:
     repository: busybox
-    tag: "1.36"
+    tag: "1.38"
     pullPolicy: IfNotPresent
   # -- Pod security context.
   # The syncin/server image uses the PUID/PGID pattern: it starts as root,
