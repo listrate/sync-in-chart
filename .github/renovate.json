@@ -4,11 +4,12 @@
     "config:recommended"
   ],
   "labels": ["renovate", "auto-bump"],
+  "rebaseWhen": "behind-base-branch",
   "regexManagers": [
     {
       "fileMatch": ["^sync-in/values.yaml$"],
       "matchStrings": [
-        "repository: syncin/server\\s+tag: \"(?<currentValue>\\d+)\""
+        "repository: syncin/server\\s+tag: \"(?<currentValue>[\\d.]+)\""
       ],
       "datasourceTemplate": "docker",
       "depNameTemplate": "syncin/server",

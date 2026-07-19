@@ -22,7 +22,7 @@ tests:
           value: Recreate
       - equal:
           path: spec.template.spec.containers[0].image
-          value: syncin/server:2
+          value: syncin/server:2.4.2
       - equal:
           path: spec.template.spec.serviceAccountName
           value: RELEASE-NAME-sync-in

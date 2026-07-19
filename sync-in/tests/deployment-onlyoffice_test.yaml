@@ -18,7 +18,7 @@ tests:
           value: 1
       - equal:
           path: spec.template.spec.containers[0].image
-          value: onlyoffice/documentserver:9.3.1.2
+          value: onlyoffice/documentserver:9.4.0.1
 
   - it: uses envFrom secret when existingSecret is not set
     set:
