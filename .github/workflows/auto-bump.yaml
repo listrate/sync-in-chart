@@ -17,6 +17,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Check if chart version was already bumped
         id: already-bumped
@@ -47,7 +48,7 @@ jobs:
             NEW_MAJOR=$((MAJOR + 1))
             NEW_VERSION="${NEW_MAJOR}.0.0"
             sed -i "s/^version: ${VERSION}/version: ${NEW_VERSION}/" sync-in/Chart.yaml
-            NEW_APP_VERSION=$(grep 'repository: syncin/server' sync-in/values.yaml | head -1 | sed 's/.*tag: "\(.*\)"/\1/')
+            NEW_APP_VERSION=$(grep -A1 'repository: syncin/server' sync-in/values.yaml | grep 'tag:' | head -1 | sed 's/.*tag: "\(.*\)"/\1/')
             sed -i "s/^appVersion:.*/appVersion: \"${NEW_APP_VERSION}\"/" sync-in/Chart.yaml
           else
             NEW_PATCH=$((PATCH + 1))
