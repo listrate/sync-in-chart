@@ -2,8 +2,8 @@ apiVersion: v2
 name: sync-in
 description: A Helm chart for Sync-in collaborative platform with optional OnlyOffice DocumentServer integration
 type: application
-version: 2.0.0
-appVersion: "2.4.4"
+version: 3.0.0
+appVersion: "2.5.0"
 keywords:
   - sync-in
   - collaboration
