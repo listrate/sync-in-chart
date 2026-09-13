@@ -20,6 +20,6 @@ jobs:
       - name: Lint
         run: helm lint ./sync-in -f test-values.yaml
       - name: Unit tests
-        run: helm unittest ./sync-in -f test-values.yaml
+        run: helm unittest ./sync-in --values test-values.yaml
       - name: Template dry-run
         run: helm template test-release ./sync-in -f test-values.yaml --no-hooks > /dev/null

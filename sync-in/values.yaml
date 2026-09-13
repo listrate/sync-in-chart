@@ -131,6 +131,9 @@ auth:
       tokenEndpointAuthMethod: client_secret_basic
       # -- Signing algorithm for ID tokens (RS256, RS384, ES256, ...)
       tokenSigningAlg: RS256
+      # -- Require the IdP to return email_verified: true (Sync-in >= 2.5.0 defaults to true).
+      # Set to false only if your IdP does not expose a reliable verified-email claim.
+      requireVerifiedEmail: true
 
 # MariaDB configuration (matches official docker-compose: mariadb:11)
 mariadb:
