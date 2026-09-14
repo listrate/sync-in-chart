@@ -7,7 +7,7 @@ fullnameOverride: ""
 syncin:
   image:
     repository: syncin/server
-    tag: "2.5.0"
+    tag: "2.5.1"
     pullPolicy: IfNotPresent
   # -- Number of replicas
   replicas: 1
