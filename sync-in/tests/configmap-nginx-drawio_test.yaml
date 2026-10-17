@@ -1,0 +1,29 @@
+suite: configmap nginx drawio
+templates:
+  - templates/configmap-nginx-drawio.yaml
+tests:
+  - it: renders when drawio is enabled
+    set:
+      drawio.enabled: true
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-sync-in-nginx-drawio
+      - matchRegex:
+          path: data["drawio.conf"]
+          pattern: "location \\^~ /drawio/"
+      - matchRegex:
+          path: data["drawio.conf"]
+          pattern: "proxy_pass http://RELEASE-NAME-sync-in-drawio:8080/"
+      - matchRegex:
+          path: data["drawio.conf"]
+          pattern: "Access-Control-Allow-Origin"
+
+  - it: does not render when drawio is disabled
+    set:
+      drawio.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

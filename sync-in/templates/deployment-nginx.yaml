@@ -41,6 +41,11 @@ spec:
               mountPath: /etc/nginx/onlyoffice.conf
               subPath: onlyoffice.conf
             {{- end }}
+            {{- if .Values.drawio.enabled }}
+            - name: nginx-drawio
+              mountPath: /etc/nginx/drawio.conf
+              subPath: drawio.conf
+            {{- end }}
           resources:
             {{- toYaml .Values.nginx.resources | nindent 12 }}
           securityContext:
@@ -53,6 +58,11 @@ spec:
         - name: nginx-onlyoffice
           configMap:
             name: {{ include "sync-in.nginx-name" . }}-onlyoffice
+        {{- end }}
+        {{- if .Values.drawio.enabled }}
+        - name: nginx-drawio
+          configMap:
+            name: {{ include "sync-in.nginx-name" . }}-drawio
         {{- end }}
       {{- with .Values.nginx.nodeSelector }}
       nodeSelector:

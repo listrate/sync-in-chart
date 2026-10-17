@@ -1,6 +1,6 @@
 # Sync-in Helm Chart
 
-A Helm chart for [Sync-in](https://sync-in.com) — an open-source collaborative platform — with optional **OnlyOffice DocumentServer** for in-browser document editing.
+A Helm chart for [Sync-in](https://sync-in.com) — an open-source collaborative platform — with optional **OnlyOffice DocumentServer** and **Draw.io** for in-browser editing.
 
 ```sh
 helm install sync-in oci://ghcr.io/listrate/charts/sync-in \
@@ -138,7 +138,36 @@ helm install sync-in ./sync-in \
 
 > `redirectUri` **must** end with `/api/auth/oidc/callback`.
 
+### With Draw.io
+
+```sh
+helm install sync-in ./sync-in \
+  --set mariadb.rootPassword=MyDbPass \
+  --set auth.encryptionKey=MyEncKey \
+  --set auth.token.access.secret=MyAccessSecret \
+  --set auth.token.refresh.secret=MyRefreshSecret \
+  --set drawio.enabled=true \
+  --set route.enabled=true \
+  --set route.hostnames[0]=drive.example.com
+```
+
+Sync-in builds the Draw.io URL from `syncin.publicUrl` (or `route.hostnames[0]`
+when the route is enabled), so set one of them when enabling Draw.io. To use an
+external Draw.io server instead of the bundled Deployment, set
+`syncin.existingEnvSecret` with
+`applications.files.editors.drawio.externalServer` in your own `environment.yaml`.
+
 ## Configuration
+
+### Server
+
+| Parameter | Default | Description |
+|---|---|---|
+| `syncin.image.tag` | `2.6.0` | Sync-in server image tag |
+| `syncin.replicas` | `1` | Number of replicas |
+| `syncin.publicUrl` | `""` | Canonical public URL; derived from `route.hostnames[0]` when empty |
+| `syncin.readinessProbe.enabled` | `true` | Probe `/healthz/ready` |
+| `syncin.livenessProbe.enabled` | `true` | Probe `/healthz/live` |
 
 ### Required auth values
 
@@ -155,9 +184,18 @@ When using `auth.existingSecret`, set the corresponding `*SecretKey` fields inst
 | Parameter | Default | Description |
 |---|---|---|
 | `onlyoffice.enabled` | `false` | Enable OnlyOffice DocumentServer |
+| `onlyoffice.image.tag` | `9.3.1.2` | Pinned to match upstream (9.4.0.1 can break Firefox) |
 | `onlyoffice.jwtSecret` | `""` | JWT secret (must match between sync-in and onlyoffice) |
 | `onlyoffice.existingSecret` | `""` | Existing Secret name for JWT secret |
 | `onlyoffice.jwtSecretKey` | `""` | Key in `onlyoffice.existingSecret` |
+
+### Draw.io
+
+| Parameter | Default | Description |
+|---|---|---|
+| `drawio.enabled` | `false` | Deploy the bundled Draw.io server |
+| `drawio.image.tag` | `32.4.1` | Draw.io image tag |
+| `drawio.resources` | `{}` | Resource requests/limits |
 
 ### HTTPRoute (Gateway API)
 
@@ -202,8 +240,9 @@ When using `auth.existingSecret`, set the corresponding `*SecretKey` fields inst
 
 ```
 HTTPRoute → nginx:alpine (reverse proxy)
-  ├── /         → sync-in:8080
-  └── /onlyoffice/ → onlyoffice:80   (gated by onlyoffice.enabled)
+  ├── /            → sync-in:8080
+  ├── /onlyoffice/ → onlyoffice:80    (gated by onlyoffice.enabled)
+  └── /drawio/     → drawio:8080      (gated by drawio.enabled)
                             │
                     ┌───────┴───────┐
                     │  sync-in:8080 │
@@ -215,8 +254,20 @@ HTTPRoute → nginx:alpine (reverse proxy)
 - **Database**: `mariadb:11` single-instance Deployment (matches official docker-compose)
 - **External access**: Gateway API HTTPRoute (not Ingress)
 - **OnlyOffice**: Disabled by default, uses `onlyoffice/documentserver:9.3.1.2`
+- **Draw.io**: Disabled by default, uses `jgraph/drawio:32.4.1`
+- **Probes**: MariaDB waits for InnoDB; sync-in probes `/healthz/ready` and `/healthz/live`
 
 ## Changelog
+
+### 4.0.0
+
+- **Breaking (feature)**: Sync-in 2.5.0 → 2.6.0 (`appVersion: 2.6.0`). New `syncin.publicUrl` value, rendered as `server.publicUrl`; derived from `route.hostnames[0]` when unset.
+- **New**: optional bundled Draw.io (`drawio.enabled`) — Deployment, Service, `/drawio/` nginx location and `applications.files.editors.drawio`.
+- **OnlyOffice**: pin `9.3.1.2` to match upstream (9.4.0.1 can fail in Firefox when Analytics.js is blocked).
+- **nginx**: forward `$http_host` (Host / X-Forwarded-Host) instead of `$host`, matching upstream; preserves non-standard ports.
+- **Probes**: MariaDB readiness via `healthcheck.sh --connect --innodb_initialized`; sync-in readiness/liveness via `/healthz/ready` and `/healthz/live`.
+- **Fix**: `requireVerifiedEmail` is now part of the `environment.yaml` checksum (it was missing from the checksum helper, so changing it did not restart the pod).
+- **Refactor**: the env Secret and nginx ConfigMaps are rendered from a single helper each, removing drift between the template and its checksum source.
 
 ### 1.2.0
 

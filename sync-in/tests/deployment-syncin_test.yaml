@@ -22,7 +22,7 @@ tests:
           value: Recreate
       - equal:
           path: spec.template.spec.containers[0].image
-          value: syncin/server:2.5.0
+          value: syncin/server:2.6.0
       - equal:
           path: spec.template.spec.serviceAccountName
           value: RELEASE-NAME-sync-in
@@ -206,3 +206,34 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].image
           value: syncin/server:3
+
+  - it: configures readiness and liveness probes
+    set:
+      mariadb.rootPassword: testpass
+      auth.encryptionKey: testkey
+      auth.token.access.secret: access-secret
+      auth.token.refresh.secret: refresh-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /healthz/ready
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: http
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /healthz/live
+
+  - it: omits probes when disabled
+    set:
+      mariadb.rootPassword: testpass
+      syncin.readinessProbe.enabled: false
+      syncin.livenessProbe.enabled: false
+      auth.encryptionKey: testkey
+      auth.token.access.secret: access-secret
+      auth.token.refresh.secret: refresh-secret
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].readinessProbe
+      - isNull:
+          path: spec.template.spec.containers[0].livenessProbe

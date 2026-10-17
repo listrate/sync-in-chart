@@ -90,6 +90,25 @@ tests:
           path: spec.template.spec.containers[0].command
           content: "--max-allowed-packet=1G"
 
+  - it: configures a readiness probe that waits for InnoDB
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command
+          value:
+            - healthcheck.sh
+            - --connect
+            - --innodb_initialized
+
+  - it: omits the readiness probe when disabled
+    set:
+      mariadb.rootPassword: testpass
+      mariadb.readinessProbe.enabled: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].readinessProbe
+
   - it: uses Recreate strategy
     set:
       mariadb.rootPassword: testpass

@@ -1,6 +1,6 @@
 ---
 name: sync-in-chart-maintenance
-description: Use when maintaining the sync-in Helm chart — processing Renovate PRs, updating dependencies, bumping the chart version, running tests, cutting a release, or cleaning up stale branches. Covers lint/unittest/template verification, auto-bump workflow interaction, and gh CLI operations for the listrate/sync-in-chart repo.
+description: Use when maintaining the sync-in Helm chart — processing Renovate PRs, updating dependencies, bumping the chart version, running tests, cutting a release, or cleaning up stale branches. Covers lint/unittest/template verification, the post-merge release workflow, and gh CLI operations for the listrate/sync-in-chart repo.
 ---
 
 # sync-in Helm Chart Maintenance
@@ -26,8 +26,8 @@ description: Use when maintaining the sync-in Helm chart — processing Renovate
 # Lint
 helm lint ./sync-in -f test-values.yaml
 
-# Unit tests (68 tests across 17 suites)
-helm unittest ./sync-in -f test-values.yaml
+# Unit tests (91 tests across 20 suites)
+helm unittest ./sync-in --values test-values.yaml
 
 # Template dry-run
 helm template test-release ./sync-in -f test-values.yaml --no-hooks > /dev/null
@@ -37,15 +37,27 @@ If tests fail due to image tag changes, update the hardcoded assertions in `sync
 
 ## Processing Renovate PRs
 
-Renovate opens PRs for Docker image bumps and GitHub Action bumps. The auto-bump workflow pushes a second commit (`chore: bump chart version to X.Y.Z`) onto each Renovate PR. This causes Renovate to disable auto-rebase. Use `rebaseWhen: "behind-base-branch"` in `renovate.json` to fix this.
+Renovate opens PRs for Docker image bumps and GitHub Action bumps. **No workflow
+edits Renovate branches any more** — the old auto-bump workflow pushed a version
+commit onto each PR, which made Renovate mark them "Edited (Blocked)" and stop
+rebasing. Version bumps now happen post-merge in `release.yaml`, so Renovate PRs
+stay updatable.
 
-### When multiple Renovate PRs stack up (8+):
+`renovate.json` constrains the risky dependencies:
+
+- `mariadb` → `11.x` only (upstream compose uses 11; 13.x is a rolling non-LTS release)
+- `onlyoffice/documentserver` → `>=9.3.1.2 <9.4.0` (upstream pins 9.3.1.2; 9.4.0.1 can break Firefox)
+- `helm` (CI) → `3.x` (Helm 4 not validated against helm-unittest yet)
+
+### When multiple Renovate PRs stack up:
 
 1. **Group PRs by risk**:
-   - *Safe*: Minor/patch Docker bumps (OnlyOffice), GitHub Action bumps
-   - *Risky*: Major version bumps for core services (MariaDB, nginx), Helm major versions
-2. **Check upstream docker-compose** for risky bumps — if the upstream repo hasn't adopted it, close the PR.
-3. **Consolidate** — rather than merging 6+ PRs individually (each with conflicting version bumps), create a single commit that applies all safe changes at once.
+   - *Safe*: Minor/patch Docker bumps, GitHub Action bumps
+   - *Risky*: Major version bumps for core services (MariaDB, OnlyOffice, nginx), Helm major versions
+2. **Check upstream docker-compose** for risky bumps — if upstream hasn't adopted it, close the PR.
+3. **Merge or consolidate** — safe one-line PRs can be merged directly (each merge
+   auto-releases a patch). For a larger change, create one commit that applies all
+   safe changes and set the release version in `Chart.yaml`.
 4. **Close the superseded PRs** after the consolidation commit merges.
 
 ### To consolidate into a single release:
@@ -54,18 +66,21 @@ Update these files in one commit:
 
 | File | What to change |
 |------|----------------|
-| `sync-in/values.yaml` | Docker image tags (syncin/server, onlyoffice/documentserver, etc.) |
-| `sync-in/Chart.yaml` | `version` (patch bump for deps), `appVersion` (match server tag) |
+| `sync-in/values.yaml` | Docker image tags (syncin/server, onlyoffice/documentserver, drawio, etc.) |
+| `sync-in/Chart.yaml` | `version` (major if server changed, otherwise patch), `appVersion` (match server tag) |
 | `.github/workflows/test.yaml` | `actions/checkout`, `azure/setup-helm`, helm version |
 | `.github/workflows/release.yaml` | Same as test.yaml + `docker/login-action`, `softprops/action-gh-release` |
-| `.github/workflows/auto-bump.yaml` | `actions/checkout` |
 | `sync-in/tests/*_test.yaml` | Any hardcoded image tags in assertions |
-| `.github/renovate.json` | Regex patterns if tag format changed (e.g. `\d+` → `[\d.]+`) |
+| `.github/renovate.json` | Regex patterns if tag format changed (e.g. `\d+` → `[\d.]+`), or `allowedVersions` rules |
+
+Bumping `Chart.yaml` explicitly makes the release workflow use that version; if
+you leave it unchanged, the workflow computes the bump from the tags/flags in
+the push.
 
 Then:
 ```bash
 helm lint ./sync-in -f test-values.yaml
-helm unittest ./sync-in -f test-values.yaml
+helm unittest ./sync-in --values test-values.yaml
 helm template test-release ./sync-in -f test-values.yaml --no-hooks > /dev/null
 git add -A && git commit -m "release: sync-in-chart vX.Y.Z ..."
 git push origin main
@@ -73,11 +88,19 @@ git push origin main
 
 ## Release workflow
 
-The release workflow (`release.yaml`) triggers automatically on push to `main` when `sync-in/Chart.yaml` changes. It:
-1. Runs lint + unittest + template dry-run (in `test.yaml` workflow)
+`release.yaml` runs on any push to `main` that touches `sync-in/Chart.yaml`,
+`sync-in/values.yaml`, or `sync-in/templates/**`. It:
+1. Uses the pushed `Chart.yaml` version if that file changed; otherwise computes
+   the bump (server tag change = major + `appVersion` sync, anything else = patch)
+   and commits it back to `main`
 2. Packages the chart: `helm package ./sync-in`
-3. Pushes OCI artifact: `helm push sync-in-*.tgz oci://ghcr.io/listrate/charts`
-4. Creates a GitHub Release with the `.tgz` asset
+3. Pushes the OCI artifact: `helm push sync-in-*.tgz oci://ghcr.io/listrate/charts`
+4. Creates a GitHub Release with the `.tgz` asset (skips if the release exists)
+
+Note: pushes made with `GITHUB_TOKEN` do not trigger further workflows, which is
+why bump, package and release all live in this one workflow.
+
+`test.yaml` runs lint + unittest + template on every PR and push to `main`.
 
 ## Cleanup after release
 
@@ -98,12 +121,14 @@ gh pr close 5 --repo listrate/sync-in-chart -c "Superseded by vX.Y.Z release"
 
 ## Version bump rules
 
-The auto-bump workflow (`auto-bump.yaml`) determines the new version:
+The release workflow (`release.yaml`) determines the new version post-merge:
 
 - **syncin/server image changed**: MAJOR bump (1.2.2 → 2.0.0) AND `appVersion` synced to the new tag
-- **Any other change**: PATCH bump (1.2.2 → 1.2.3)
+- **Any other chart change**: PATCH bump (1.2.2 → 1.2.3)
+- **`Chart.yaml` already changed in the push**: that exact version is used (manual/feature release)
 
-The auto-bump only fires on Renovate PRs (`github.actor == 'renovate[bot]'`). Manual commits must bump explicitly.
+There is no longer a separate auto-bump workflow; do not add one that pushes to
+Renovate branches.
 
 ## Key files reference
 
@@ -111,11 +136,10 @@ The auto-bump only fires on Renovate PRs (`github.actor == 'renovate[bot]'`). Ma
 |------|---------|
 | `sync-in/Chart.yaml` | Chart version, appVersion, metadata |
 | `sync-in/values.yaml` | Default values, image tags, feature toggles |
-| `sync-in/templates/` | 18 Kubernetes resource templates |
-| `sync-in/tests/` | 17 helm-unittest suites |
+| `sync-in/templates/` | 20 Kubernetes resource templates |
+| `sync-in/tests/` | 20 helm-unittest suites (91 tests) |
 | `test-values.yaml` | Minimal secrets for CI test runs |
 | `.github/workflows/test.yaml` | PR/push CI: lint, unittest, template |
-| `.github/workflows/release.yaml` | Chart packaging + GitHub Release |
-| `.github/workflows/auto-bump.yaml` | Auto-bumps Chart.yaml on Renovate PRs |
-| `.github/renovate.json` | Renovate config with regex managers for Docker tags |
+| `.github/workflows/release.yaml` | Version bump + packaging + OCI push + GitHub Release |
+| `.github/renovate.json` | Renovate config: custom managers for Docker tags, version constraints |
 | `AGENTS.md` | Project documentation and chart architecture |

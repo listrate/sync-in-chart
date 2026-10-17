@@ -3,11 +3,14 @@
   "extends": [
     "config:recommended"
   ],
-  "labels": ["renovate", "auto-bump"],
+  "labels": ["renovate"],
   "rebaseWhen": "behind-base-branch",
-  "regexManagers": [
+  "configMigration": true,
+  "customManagers": [
     {
-      "fileMatch": ["^sync-in/values.yaml$"],
+      "customType": "regex",
+      "description": "Sync-in server image (sync-in/values.yaml)",
+      "fileMatch": ["^sync-in/values\\.yaml$"],
       "matchStrings": [
         "repository: syncin/server\\s+tag: \"(?<currentValue>[\\d.]+)\""
       ],
@@ -16,7 +19,9 @@
       "versioningTemplate": "docker"
     },
     {
-      "fileMatch": ["^sync-in/values.yaml$"],
+      "customType": "regex",
+      "description": "MariaDB image (sync-in/values.yaml)",
+      "fileMatch": ["^sync-in/values\\.yaml$"],
       "matchStrings": [
         "repository: mariadb\\s+tag: \"(?<currentValue>\\d+)\""
       ],
@@ -25,7 +30,9 @@
       "versioningTemplate": "docker"
     },
     {
-      "fileMatch": ["^sync-in/values.yaml$"],
+      "customType": "regex",
+      "description": "OnlyOffice DocumentServer image (sync-in/values.yaml)",
+      "fileMatch": ["^sync-in/values\\.yaml$"],
       "matchStrings": [
         "repository: onlyoffice/documentserver\\s+tag: \"(?<currentValue>[\\d.]+)\""
       ],
@@ -34,13 +41,46 @@
       "versioningTemplate": "docker"
     },
     {
-      "fileMatch": ["^sync-in/values.yaml$"],
+      "customType": "regex",
+      "description": "Draw.io image (sync-in/values.yaml)",
+      "fileMatch": ["^sync-in/values\\.yaml$"],
+      "matchStrings": [
+        "repository: jgraph/drawio\\s+tag: \"(?<currentValue>[\\d.]+)\""
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "jgraph/drawio",
+      "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Busybox init container image (sync-in/values.yaml)",
+      "fileMatch": ["^sync-in/values\\.yaml$"],
       "matchStrings": [
         "repository: busybox\\s+tag: \"(?<currentValue>[\\d.]+)\""
       ],
       "datasourceTemplate": "docker",
       "depNameTemplate": "busybox",
       "versioningTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "MariaDB: stay on the 11.x line like the official docker-compose. 13.x is a stable *rolling* (non-LTS) release and the built-in database is only a convenience for this chart.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["mariadb"],
+      "allowedVersions": "11.x"
+    },
+    {
+      "description": "OnlyOffice: upstream pins 9.3.1.2 because 9.4.0.1 can break Firefox when Analytics.js is blocked (ONLYOFFICE/DocumentServer#3686). Allow 9.3.x patches only until upstream moves.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["onlyoffice/documentserver"],
+      "allowedVersions": ">=9.3.1.2 <9.4.0"
+    },
+    {
+      "description": "Helm CLI in CI stays on 3.x until helm-unittest and the chart are validated against Helm 4.",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["helm"],
+      "allowedVersions": "3.x"
     }
   ]
 }

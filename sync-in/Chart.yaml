@@ -1,13 +1,14 @@
 apiVersion: v2
 name: sync-in
-description: A Helm chart for Sync-in collaborative platform with optional OnlyOffice DocumentServer integration
+description: A Helm chart for Sync-in collaborative platform with optional OnlyOffice DocumentServer and Draw.io integration
 type: application
-version: 3.0.1
-appVersion: "2.5.0"
+version: 4.0.0
+appVersion: "2.6.0"
 keywords:
   - sync-in
   - collaboration
   - onlyoffice
+  - drawio
   - office
 home: https://sync-in.com
 sources:

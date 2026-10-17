@@ -41,6 +41,22 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{ include "sync-in.fullname" . }}-onlyoffice
 {{- end -}}
 
+{{- define "sync-in.drawio-name" -}}
+{{ include "sync-in.fullname" . }}-drawio
+{{- end -}}
+
+{{/*
+Canonical public URL used by Sync-in to build editor URLs and notification links.
+Falls back to the first HTTPRoute hostname (https) when syncin.publicUrl is empty.
+*/}}
+{{- define "sync-in.public-url" -}}
+{{- if .Values.syncin.publicUrl -}}
+{{- .Values.syncin.publicUrl | trimSuffix "/" -}}
+{{- else if and .Values.route.enabled (gt (len .Values.route.hostnames) 0) -}}
+https://{{ index .Values.route.hostnames 0 }}
+{{- end -}}
+{{- end -}}
+
 {{- define "sync-in.mariadb-svc" -}}
 {{ include "sync-in.fullname" . }}-mariadb
 {{- end -}}
@@ -104,6 +120,11 @@ stringData:
     mysql:
       url: '{{ include "sync-in.mysql-url" . }}'
   {{- end }}
+  {{- $publicUrl := include "sync-in.public-url" . }}
+  {{- if $publicUrl }}
+    server:
+      publicUrl: '{{ $publicUrl }}'
+  {{- end }}
     auth:
       provider: '{{ .Values.auth.provider | default "mysql" }}'
       encryptionKey: '{{ include "sync-in.secret-value" (dict "root" . "value" .Values.auth.encryptionKey "existingSecret" .Values.auth.existingSecret "secretKey" .Values.auth.encryptionKeySecretKey "required" "auth.encryptionKey is required") }}'
@@ -134,6 +155,7 @@ stringData:
           allowInsecureRequests: {{ .Values.auth.oidc.security.allowInsecureRequests }}
           tokenEndpointAuthMethod: '{{ .Values.auth.oidc.security.tokenEndpointAuthMethod }}'
           tokenSigningAlg: '{{ .Values.auth.oidc.security.tokenSigningAlg }}'
+          requireVerifiedEmail: {{ .Values.auth.oidc.security.requireVerifiedEmail }}
     {{- end }}
     applications:
       files:
@@ -141,6 +163,8 @@ stringData:
         editors:
           collabora:
             enabled: false
+          drawio:
+            enabled: {{ .Values.drawio.enabled }}
     {{- if .Values.onlyoffice.enabled }}
           onlyoffice:
             enabled: true
@@ -156,7 +180,7 @@ stringData:
 {{- end -}}
 
 {{- define "sync-in.checksum-nginx" -}}
-{{- printf "%s%s" (include "sync-in.templates.configmap-nginx" .) (include "sync-in.templates.configmap-nginx-onlyoffice" .) | sha256sum -}}
+{{- printf "%s%s%s" (include "sync-in.templates.configmap-nginx" .) (include "sync-in.templates.configmap-nginx-onlyoffice" .) (include "sync-in.templates.configmap-nginx-drawio" .) | sha256sum -}}
 {{- end -}}
 
 {{- define "sync-in.templates.configmap-nginx" -}}
@@ -193,10 +217,10 @@ data:
 
         proxy_http_version 1.1;
         chunked_transfer_encoding on;
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP  $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Host $http_host;
         proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
@@ -232,6 +256,10 @@ data:
         include /etc/nginx/onlyoffice.conf;
     {{- end }}
 
+    {{- if .Values.drawio.enabled }}
+        include /etc/nginx/drawio.conf;
+    {{- end }}
+
     {{- .Values.nginx.extraServerConfig | nindent 8 }}
     }
 {{- end -}}
@@ -251,13 +279,39 @@ data:
         proxy_pass http://{{ include "sync-in.onlyoffice-name" . }}:80/;
         proxy_set_header X-Real-IP  $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Host $host/onlyoffice;
+        proxy_set_header X-Forwarded-Host $http_host/onlyoffice;
         proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
         proxy_no_cache 1;
         proxy_cache_bypass 1;
+    }
+{{- end -}}
+{{- end -}}
+
+{{- define "sync-in.templates.configmap-nginx-drawio" -}}
+{{- if .Values.drawio.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sync-in.nginx-name" . }}-drawio
+  labels:
+    {{- include "sync-in.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nginx
+data:
+  drawio.conf: |
+    location ^~ /drawio/ {
+        # Allow resource loading from the sandboxed iframe's opaque origin.
+        add_header Access-Control-Allow-Origin "*" always;
+        proxy_pass http://{{ include "sync-in.drawio-name" . }}:8080/;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_set_header Host $http_host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
     }
 {{- end -}}
 {{- end -}}

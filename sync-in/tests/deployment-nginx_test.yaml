@@ -64,3 +64,30 @@ tests:
             name: nginx-onlyoffice
             configMap:
               name: RELEASE-NAME-sync-in-nginx-onlyoffice
+
+  - it: mounts drawio config when drawio is enabled
+    set:
+      mariadb.rootPassword: testpass
+      drawio.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: nginx-drawio
+            mountPath: /etc/nginx/drawio.conf
+            subPath: drawio.conf
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: nginx-drawio
+            configMap:
+              name: RELEASE-NAME-sync-in-nginx-drawio
+
+  - it: omits drawio config when drawio is disabled
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: nginx-drawio

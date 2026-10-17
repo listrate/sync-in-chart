@@ -2,13 +2,13 @@
 
 A first-class Helm chart for [Sync-in](https://sync-in.com) — an open-source collaborative platform — based on the official [docker-compose setup](https://sync-in.com/docs/setup-guide/docker/).
 
-Supports optional **OnlyOffice DocumentServer** for in-browser document editing. Does not include Collabora or Euro-Office.
+Supports optional **OnlyOffice DocumentServer** and **Draw.io** for in-browser editing. Does not include Collabora or Euro-Office.
 
 ## Source material
 
 - Official docker-compose: `https://github.com/Sync-in/server/releases/latest`
 - Local reference: `sync-in-docker/` (downloaded compose stack)
-- Docker images: `syncin/server:2`, `onlyoffice/documentserver:9.3.1.2`, `mariadb:11`
+- Docker images: `syncin/server:2.6.0`, `onlyoffice/documentserver:9.3.1.2`, `jgraph/drawio:32.4.1`, `mariadb:11`
 
 ## Chart architecture
 
@@ -17,8 +17,9 @@ HTTPRoute (Gateway API) → envoy-external
   │
   ▼
 nginx:alpine (reverse proxy)
-  ├── /         → sync-in:8080
-  └── /onlyoffice/ → onlyoffice:80   (gated by onlyoffice.enabled)
+  ├── /            → sync-in:8080
+  ├── /onlyoffice/ → onlyoffice:80   (gated by onlyoffice.enabled)
+  └── /drawio/     → drawio:8080     (gated by drawio.enabled)
                             │
                     ┌───────┴───────┐
                     │  sync-in:8080 │
@@ -34,7 +35,10 @@ nginx:alpine (reverse proxy)
 |----------|--------|
 | Database | **Inline `mariadb:11` Deployment** — single instance, matching the official docker-compose exactly. No Galera cluster, no subchart dependency. |
 | External access | **Gateway API HTTPRoute** (not Ingress). Configurable parentRefs for envoy-proxy/gateway. |
-| OnlyOffice | **Disabled by default** (`onlyoffice.enabled: false`). |
+| OnlyOffice | **Disabled by default** (`onlyoffice.enabled: false`). Image pinned to `9.3.1.2` to match upstream (9.4.0.1 can break Firefox). |
+| Draw.io | **Disabled by default** (`drawio.enabled: false`). Bundled `jgraph/drawio` Deployment + `/drawio/` nginx location. Sync-in derives the editor URL from `syncin.publicUrl`. |
+| Public URL | `syncin.publicUrl` is rendered as `server.publicUrl`; when empty it is derived from `route.hostnames[0]`. Upstream will require it in the next major release. |
+| Probes | MariaDB readiness uses `healthcheck.sh --connect --innodb_initialized`; sync-in uses `/healthz/ready` and `/healthz/live`. |
 | Secrets | **Dual `existingSecret` pattern**: (1) **field-level** — `auth.existingSecret` + `*SecretKey` and `onlyoffice.existingSecret` + `jwtSecretKey` let you externalize individual secret values while the chart still renders `environment.yaml`; (2) **full-file** — `syncin.existingEnvSecret` replaces the entire `environment.yaml` for fully self-managed config. |
 | Storage | Separate storageClass per component: `persistence.data.storageClass` (sync-in data) and `mariadb.persistence.storageClass` (MariaDB data). |
 | Auth | Provider selected via `auth.provider` (`mysql` default, or `oidc`). Sensitive values come from either inline `.Values.auth.*` fields OR an `auth.existingSecret` with `*SecretKey` fields (`encryptionKeySecretKey`, `secretSecretKey`, `clientSecretSecretKey`). The chart always renders `environment.yaml` — only full-file escape is `syncin.existingEnvSecret`. |
@@ -73,6 +77,18 @@ helm install sync-in ./sync-in \
   --set route.enabled=true \
   --set route.hostnames[0]=drive.plim.xyz
 ```
+
+### With Draw.io
+```bash
+helm install sync-in ./sync-in \
+  --set mariadb.rootPassword=... \
+  --set auth.encryptionKey=... --set auth.token.access.secret=... --set auth.token.refresh.secret=... \
+  --set drawio.enabled=true \
+  --set route.enabled=true \
+  --set route.hostnames[0]=drive.plim.xyz
+```
+`syncin.publicUrl` (or the first route hostname) must be set: Sync-in builds the
+Draw.io iframe URL from it.
 
 ### With pre-created auth secrets
 Instead of putting secrets in Helm values, pre-create a Secret and reference it:
@@ -170,11 +186,35 @@ kubernetes_pods_log → pod name, namespace, tail lines
 
 ```bash
 # Lint
-helm lint ./sync-in
+helm lint ./sync-in -f test-values.yaml
 
-# Template dry-run with test values
-helm template test ./sync-in -f test-values.yaml
+# Unit tests (91 tests across 20 suites)
+helm unittest ./sync-in --values test-values.yaml
+
+# Template dry-run
+helm template test ./sync-in -f test-values.yaml --no-hooks > /dev/null
 
 # Package for OCI / Flux
 helm package ./sync-in
 ```
+
+### Releasing
+
+The `Release` workflow runs on any push to `main` that touches
+`sync-in/Chart.yaml`, `sync-in/values.yaml`, or `sync-in/templates/**`:
+
+- If the push already changed `Chart.yaml`, that version is released as-is.
+- Otherwise the workflow bumps it: a change to the `syncin/server` tag is a
+  **major** bump and syncs `appVersion`; any other chart change is a **patch**
+  bump. It commits the bump to `main`, packages, pushes the OCI artifact and
+  creates the GitHub release.
+
+This is deliberately post-merge. A workflow that pushed version bumps onto
+Renovate branches made Renovate mark those PRs "Edited (Blocked)" and stop
+rebasing them, and `GITHUB_TOKEN` pushes never triggered the follow-up
+workflow anyway. Merging a Renovate PR now releases a patch automatically;
+close Renovate PRs that are superseded by a bigger release.
+
+`Test` runs lint + unittest + template on every PR and push to `main`.
+
+## Common past issues

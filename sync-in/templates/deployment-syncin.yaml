@@ -77,6 +77,26 @@ spec:
             - name: http
               containerPort: 8080
               protocol: TCP
+          {{- if .Values.syncin.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /healthz/ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          {{- end }}
+          {{- if .Values.syncin.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /healthz/live
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          {{- end }}
           volumeMounts:
             - name: environment
               mountPath: /app/environment/environment.yaml

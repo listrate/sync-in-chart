@@ -1,0 +1,55 @@
+suite: deployment drawio
+templates:
+  - templates/deployment-drawio.yaml
+tests:
+  - it: renders when drawio is enabled
+    set:
+      drawio.enabled: true
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-sync-in-drawio
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: jgraph/drawio:32.4.1
+
+  - it: exposes port 8080
+    set:
+      drawio.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 8080
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].name
+          value: http
+
+  - it: does not render when drawio is disabled
+    set:
+      drawio.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: applies scheduling settings
+    set:
+      drawio.enabled: true
+      drawio.nodeSelector:
+        kubernetes.io/hostname: k8s-2
+      drawio.tolerations:
+        - key: dedicated
+          operator: Exists
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["kubernetes.io/hostname"]
+          value: k8s-2
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: dedicated
+            operator: Exists

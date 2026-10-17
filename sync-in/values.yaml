@@ -7,7 +7,7 @@ fullnameOverride: ""
 syncin:
   image:
     repository: syncin/server
-    tag: "2.5.0"
+    tag: "2.6.0"
     pullPolicy: IfNotPresent
   # -- Number of replicas
   replicas: 1
@@ -23,6 +23,18 @@ syncin:
   pgid: 1000
   # -- Force permissions on /app/data at startup
   forcePermissions: false
+  # -- Canonical public URL of the instance (e.g. https://drive.example.com).
+  # Sync-in uses it to build editor URLs (OnlyOffice/Collabora/Draw.io) and
+  # notification links. When empty, the chart derives it from route.hostnames[0]
+  # if route.enabled is true; otherwise Sync-in falls back to the request origin.
+  # Upstream will make this setting required in the next major release.
+  publicUrl: ""
+  # -- Readiness probe for the server (/healthz/ready)
+  readinessProbe:
+    enabled: true
+  # -- Liveness probe for the server (/healthz/live)
+  livenessProbe:
+    enabled: true
   # -- Resource requests/limits
   resources: {}
     # requests:
@@ -165,6 +177,9 @@ mariadb:
   podSecurityContext: {}
   # -- Container security context
   securityContext: {}
+  # -- Readiness probe for MariaDB (uses healthcheck.sh --connect --innodb_initialized)
+  readinessProbe:
+    enabled: true
   persistence:
     enabled: true
     size: 10Gi
@@ -219,7 +234,9 @@ onlyoffice:
   enabled: false
   image:
     repository: onlyoffice/documentserver
-    tag: "9.4.0.1"
+    # Pinned to match the official docker-compose: 9.4.0.1 may fail in Firefox
+    # when Analytics.js is blocked (ONLYOFFICE/DocumentServer#3686).
+    tag: "9.3.1.2"
     pullPolicy: IfNotPresent
   # -- Name of an existing Secret providing the OnlyOffice JWT secret.
   # When set, the chart reads JWT_SECRET from this Secret instead of .Values.onlyoffice.jwtSecret.
@@ -236,6 +253,29 @@ onlyoffice:
       memory: 2Gi
     limits:
       memory: 4Gi
+  # -- Node selector
+  nodeSelector: {}
+  # -- Tolerations
+  tolerations: []
+  # -- Affinity
+  affinity: {}
+  # -- Pod security context
+  podSecurityContext: {}
+  # -- Container security context
+  securityContext: {}
+
+# Draw.io diagram editor configuration (matches official docker-compose: jgraph/drawio)
+drawio:
+  # -- Enable the built-in draw.io server. Sync-in builds the editor URL from
+  # syncin.publicUrl (or route.hostnames[0]); make sure it is set when enabling
+  # this in front of a reverse proxy.
+  enabled: false
+  image:
+    repository: jgraph/drawio
+    tag: "32.4.1"
+    pullPolicy: IfNotPresent
+  # -- Resource requests/limits
+  resources: {}
   # -- Node selector
   nodeSelector: {}
   # -- Tolerations

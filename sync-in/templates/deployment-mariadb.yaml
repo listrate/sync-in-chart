@@ -43,6 +43,18 @@ spec:
             - name: mysql
               containerPort: 3306
               protocol: TCP
+          {{- if .Values.mariadb.readinessProbe.enabled }}
+          readinessProbe:
+            exec:
+              command:
+                - healthcheck.sh
+                - --connect
+                - --innodb_initialized
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          {{- end }}
           securityContext:
             {{- toYaml .Values.mariadb.securityContext | nindent 12 }}
           volumeMounts:

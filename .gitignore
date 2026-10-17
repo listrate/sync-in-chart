@@ -2,3 +2,7 @@
 .DS_Store
 .debug/
 sync-in-docker/
+
+# Local tooling state (mise / helm sandboxes)
+/.helm/
+/.mise-*/

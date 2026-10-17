@@ -5,38 +5,139 @@ on:
     branches: [main]
     paths:
       - 'sync-in/Chart.yaml'
+      - 'sync-in/values.yaml'
+      - 'sync-in/templates/**'
+
+# Serialise releases so two quick merges cannot compute the same version.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      packages: write
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
       - name: Set up Helm
         uses: azure/setup-helm@v5
         with:
-          version: v3.21.4
+          version: v3.22.1
+
+      # Gate the release on the same checks CI runs, so a merge that skips the
+      # Test workflow (e.g. a bot push) can never publish a broken chart.
+      - name: Install helm-unittest plugin
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version v0.8.0
+
+      - name: Lint
+        run: helm lint ./sync-in -f test-values.yaml
+
+      - name: Unit tests
+        run: helm unittest ./sync-in --values test-values.yaml
+
+      - name: Template dry-run
+        run: helm template test-release ./sync-in -f test-values.yaml --no-hooks > /dev/null
+
+      # Chart.yaml is the source of truth when a push bumps it explicitly.
+      # Otherwise derive the bump from the pushed files: a change to the
+      # syncin/server tag is a major bump (and syncs appVersion), anything
+      # else is a patch bump.
+      #
+      # Bumping here rather than on Renovate branches matters: commits pushed
+      # by a workflow with GITHUB_TOKEN do not trigger further workflows, and
+      # editing a Renovate branch makes Renovate mark the PR "Edited (Blocked)".
+      - name: Determine chart version
+        id: version
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          VERSION=$(awk '/^version:/ {print $2}' sync-in/Chart.yaml)
+          BUMP=false
+
+          if [ -n "${BEFORE:-}" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
+             && git diff --name-only "$BEFORE"...HEAD -- sync-in/Chart.yaml | grep -q .; then
+            echo "Chart.yaml was updated in this push; releasing $VERSION"
+          else
+            OLD_TAG=""
+            if [ -n "${BEFORE:-}" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
+              OLD_TAG=$(git show "$BEFORE:sync-in/values.yaml" 2>/dev/null \
+                | grep -A1 'repository: syncin/server' | grep 'tag:' | head -1 \
+                | sed -E 's/.*tag: "([^"]+)".*/\1/') || true
+            fi
+            NEW_TAG=$(grep -A1 'repository: syncin/server' sync-in/values.yaml \
+              | grep 'tag:' | head -1 | sed -E 's/.*tag: "([^"]+)".*/\1/')
+
+            if [ -n "$OLD_TAG" ] && [ "$OLD_TAG" != "$NEW_TAG" ]; then
+              VERSION=$(awk -F. '{print $1+1 ".0.0"}' <<< "$VERSION")
+              echo "syncin/server changed ($OLD_TAG -> $NEW_TAG): major bump to $VERSION"
+            else
+              VERSION=$(awk -F. '{print $1 "." $2 "." $3+1}' <<< "$VERSION")
+              echo "Chart files changed: patch bump to $VERSION"
+            fi
+
+            sed -i -E "s/^version: .*/version: ${VERSION}/" sync-in/Chart.yaml
+            sed -i -E "s/^appVersion: .*/appVersion: \"${NEW_TAG}\"/" sync-in/Chart.yaml
+            BUMP=true
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+
+      - name: Commit version bump
+        id: commit
+        if: steps.version.outputs.bump == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add sync-in/Chart.yaml
+          git commit -m "chore: bump chart version to ${{ steps.version.outputs.version }}"
+          git pull --rebase origin main
+          git push
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether the release already exists
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if gh release view "sync-in-${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Login to GHCR
+        if: steps.existing.outputs.exists == 'false'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Get chart version
-        id: version
-        run: |
-          VERSION=$(grep '^version:' sync-in/Chart.yaml | awk '{print $2}')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Package
+        if: steps.existing.outputs.exists == 'false'
         run: helm package ./sync-in
+
       - name: Push to GHCR
+        if: steps.existing.outputs.exists == 'false'
         run: helm push sync-in-${{ steps.version.outputs.version }}.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+
       - name: Create GitHub Release
+        if: steps.existing.outputs.exists == 'false'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: sync-in-${{ steps.version.outputs.version }}
           name: sync-in-${{ steps.version.outputs.version }}
+          target_commitish: ${{ steps.commit.outputs.sha || github.sha }}
           files: sync-in-${{ steps.version.outputs.version }}.tgz
           generate_release_notes: true

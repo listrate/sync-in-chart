@@ -51,6 +51,46 @@ tests:
           path: data["nginx.conf"]
           pattern: "include /etc/nginx/onlyoffice.conf"
 
+  - it: includes drawio include when enabled
+    documentSelector:
+      path: kind
+      value: ConfigMap
+    set:
+      mariadb.rootPassword: testpass
+      drawio.enabled: true
+    asserts:
+      - matchRegex:
+          path: data["nginx.conf"]
+          pattern: "include /etc/nginx/drawio.conf"
+
+  - it: omits drawio include when disabled
+    documentSelector:
+      path: kind
+      value: ConfigMap
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - notMatchRegex:
+          path: data["nginx.conf"]
+          pattern: "include /etc/nginx/drawio.conf"
+
+  - it: forwards the original Host header including any port
+    documentSelector:
+      path: kind
+      value: ConfigMap
+    set:
+      mariadb.rootPassword: testpass
+    asserts:
+      - matchRegex:
+          path: data["nginx.conf"]
+          pattern: "proxy_set_header Host \\$http_host;"
+      - matchRegex:
+          path: data["nginx.conf"]
+          pattern: "proxy_set_header X-Forwarded-Host \\$http_host;"
+      - notMatchRegex:
+          path: data["nginx.conf"]
+          pattern: "proxy_set_header Host \\$host;"
+
   - it: includes extra server config
     documentSelector:
       path: kind
